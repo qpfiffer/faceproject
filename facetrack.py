@@ -61,9 +61,7 @@ def main():
         for capture_thread in capture_threads:
             rval, frame = capture_thread.read()
             cv2.imshow("preview", frame)
-            c = cv2.waitKey(1) % 0x100
-            if c == 27 or c == 10:
-                break
+            cv2.waitKey(1)
 
     cv2.destroyWindow("preview")
 
