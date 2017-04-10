@@ -2,18 +2,12 @@
 import cv2
 from threading import Thread
 
-def face_detect(frame):
-    # Get user supplied values
-    cascPath = "./haarcascade_frontalface_alt.xml"
-
-    # Create the haar cascade
-    faceCascade = cv2.CascadeClassifier(cascPath)
-
+def face_detect(frame, face_cascade):
     # Read the image
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Detect faces in the image
-    faces = faceCascade.detectMultiScale(
+    faces = face_cascade.detectMultiScale(
         gray,
         scaleFactor=1.1,
         minNeighbors=5,
@@ -35,6 +29,12 @@ class CameraFrenk(object):
         self.cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
         self.rval, self.frame = self.cap.read()
 
+        # Create the haar cascade
+        # Get user supplied values
+        casc_path = "./haarcascade_frontalface_alt.xml"
+        self.face_cascade = cv2.CascadeClassifier(casc_path)
+
+
     def start(self):
         Thread(target=self.update, args=()).start()
         return self
@@ -45,7 +45,7 @@ class CameraFrenk(object):
     def update(self):
         while True:
             self.rval, self.frame = self.cap.read()
-            #self.frame = face_detect(frame)
+            #self.frame = face_detect(self.frame, self.face_cascade)
 
 def main():
     cv2.namedWindow("preview")
