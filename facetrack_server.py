@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
-import cv2
 from threading import Thread
+import cv2
+import signal, sys
 
 def face_detect(frame, face_cascade):
     # Read the image
@@ -24,6 +25,9 @@ def face_detect(frame, face_cascade):
 class CameraFrenk(object):
     def __init__(self, index):
         self.cap = cv2.VideoCapture(index)
+        if self.cap.isOpened() is False:
+            raise Exception("Camera does not exist.")
+
         self.cap.set(cv2.cv.CV_CAP_PROP_FPS, 120)
         self.cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
         self.cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
@@ -36,26 +40,41 @@ class CameraFrenk(object):
 
 
     def start(self):
-        Thread(target=self.update, args=()).start()
-        return self
+        self.thread = Thread(target=self.update, args=())
+        self._stop = False
+        self.thread.start()
+
+    def stop(self):
+        self._stop = True
 
     def read(self):
         return (self.rval, self.frame)
 
     def update(self):
         while True:
+            if self._stop:
+                break
             self.rval, self.frame = self.cap.read()
             #self.frame = face_detect(self.frame, self.face_cascade)
 
 def main():
     cv2.namedWindow("preview")
 
-    x0 = CameraFrenk(1)
-    x0.start()
-    x1 = CameraFrenk(2)
-    x1.start()
+    capture_threads = []
+    for x in range(0, 10):
+        try:
+            x0 = CameraFrenk(x)
+            x0.start()
+            capture_threads.append(x0)
+        except Exception:
+            pass
 
-    capture_threads = (x0, x1)
+    def signal_handler(signal, frame):
+        for x in capture_threads:
+            x.stop()
+            sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     while True:
         for capture_thread in capture_threads:
