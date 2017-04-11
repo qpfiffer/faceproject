@@ -1,7 +1,8 @@
 #!/usr/bin/env python2
 from threading import Thread
 import cv2
-import signal, sys
+import signal, sys, socket, hashlib
+m = hashlib.md5()
 
 def face_detect(frame, face_cascade):
     # Read the image
@@ -54,14 +55,14 @@ class CameraFrenk(object):
         while True:
             if self._stop:
                 break
-            self.rval, self.frame = self.cap.read()
-            #self.frame = face_detect(self.frame, self.face_cascade)
+            rval, frame = self.cap.read()
+            frame = face_detect(frame, self.face_cascade)
+            self.rval, self.frame = cv2.imencode(".jpg", frame)
 
 def main():
-    cv2.namedWindow("preview")
 
     capture_threads = []
-    for x in range(0, 10):
+    for x in range(4):
         try:
             x0 = CameraFrenk(x)
             x0.start()
@@ -73,16 +74,41 @@ def main():
         for x in capture_threads:
             x.stop()
             sys.exit(0)
-
     signal.signal(signal.SIGINT, signal_handler)
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rval, frame = capture_threads[0].read()
+    frame = frame.tostring()
+    m.update(frame)
+    print "FRAME HASH: {}".format(m.hexdigest())
+    frame_size = len(frame)
+    data_size = str(frame_size).zfill(8)
+    print "DATA SIZE:" + data_size
 
     while True:
         for capture_thread in capture_threads:
-            rval, frame = capture_thread.read()
-            cv2.imshow("preview", frame)
-            cv2.waitKey(1)
+            #rval, frame = capture_thread.read()
+            #frame = frame.tostring()
 
-    cv2.destroyWindow("preview")
+            destination = ('127.0.0.1', 5005)
+            packet_size = 4096
+            frame_size = len(frame)
+            chunks = range(int(1 + (frame_size - 1) / packet_size))
+            data_size = str(frame_size).zfill(8)
+            s.sendto(data_size, destination)
+
+            bytes_sent = 0
+            for i in chunks:
+                minimum = i * packet_size
+                maximum = i * packet_size + 4096
+                frame_bytes = frame[minimum:maximum]
+                s.sendto(frame_bytes, destination)
+                bytes_sent = bytes_sent + 4096
+            minimum = bytes_sent
+            maximum = frame_size
+            frame_bytes = frame[minimum:maximum]
+            s.sendto(frame_bytes, destination)
+            bytes_sent = bytes_sent + (maximum - minimum)
 
 if __name__ == '__main__':
     main()
