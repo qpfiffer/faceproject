@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 from threading import Thread
 import cv2
-import signal, sys, socket, hashlib
+import signal, sys, socket, hashlib, array
 m = hashlib.md5()
 
 def face_detect(frame, face_cascade):
@@ -79,6 +79,7 @@ def main():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     rval, frame = capture_threads[0].read()
     frame = frame.tostring()
+    frame_bytes = array.array("B", frame)
     m.update(frame)
     print "FRAME HASH: {}".format(m.hexdigest())
     frame_size = len(frame)
@@ -92,7 +93,7 @@ def main():
 
             destination = ('127.0.0.1', 5005)
             packet_size = 4096
-            frame_size = len(frame)
+            frame_size = len(frame_bytes)
             chunks = range(int(1 + (frame_size - 1) / packet_size))
             data_size = str(frame_size).zfill(8)
             s.sendto(data_size, destination)
@@ -101,13 +102,13 @@ def main():
             for i in chunks:
                 minimum = i * packet_size
                 maximum = i * packet_size + 4096
-                frame_bytes = frame[minimum:maximum]
-                s.sendto(frame_bytes, destination)
+                frame_bytes_specific = frame_bytes[minimum:maximum]
+                s.sendto(frame_bytes_specific, destination)
                 bytes_sent = bytes_sent + 4096
             minimum = bytes_sent
             maximum = frame_size
-            frame_bytes = frame[minimum:maximum]
-            s.sendto(frame_bytes, destination)
+            frame_bytes_specific = frame_bytes[minimum:maximum]
+            s.sendto(frame_bytes_specific, destination)
             bytes_sent = bytes_sent + (maximum - minimum)
 
 if __name__ == '__main__':

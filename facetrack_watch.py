@@ -14,7 +14,7 @@ def main():
     while True:
         try:
             data, addr = s.recvfrom(8)
-            print "DATA SIZE: " + data
+            print "DATA SIZE: " + str(int(data))
             frame, addr = s.recvfrom(int(data))
             m = hashlib.md5()
             m.update(frame)
