@@ -4,6 +4,9 @@ import cv2
 import signal, sys, socket, hashlib, array
 m = hashlib.md5()
 
+class CameraDoesNotExistException(Exception):
+    pass
+
 def face_detect(frame, face_cascade):
     # Read the image
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -25,20 +28,26 @@ def face_detect(frame, face_cascade):
 
 class CameraFrenk(object):
     def __init__(self, index):
+        super(CameraFrenk, self).__init__()
         self.cap = cv2.VideoCapture(index)
         if self.cap.isOpened() is False:
-            raise Exception("Camera does not exist.")
+            raise CameraDoesNotExistException()
 
         self.cap.set(cv2.cv.CV_CAP_PROP_FPS, 120)
         self.cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
         self.cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
-        self.rval, self.frame = self.cap.read()
+        rval, frame = self.cap.read()
 
         # Create the haar cascade
         # Get user supplied values
         casc_path = "./haarcascade_frontalface_alt.xml"
         self.face_cascade = cv2.CascadeClassifier(casc_path)
+        self._grab_and_encode()
 
+    def _grab_and_encode(self):
+        rval, frame = self.cap.read()
+        frame = face_detect(frame, self.face_cascade)
+        self.rval, self.frame = cv2.imencode(".jpg", frame)
 
     def start(self):
         self.thread = Thread(target=self.update, args=())
@@ -55,20 +64,17 @@ class CameraFrenk(object):
         while True:
             if self._stop:
                 break
-            rval, frame = self.cap.read()
-            frame = face_detect(frame, self.face_cascade)
-            self.rval, self.frame = cv2.imencode(".jpg", frame)
+            self._grab_and_encode()
 
 def main():
-
     capture_threads = []
     for x in range(4):
         try:
             x0 = CameraFrenk(x)
             x0.start()
             capture_threads.append(x0)
-        except Exception:
-            pass
+        except CameraDoesNotExistException:
+            continue
 
     def signal_handler(signal, frame):
         for x in capture_threads:
@@ -77,34 +83,29 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    rval, frame = capture_threads[0].read()
-    frame = frame.tostring()
-    frame_bytes = array.array("B", frame)
-    m.update(frame)
-    print "FRAME HASH: {}".format(m.hexdigest())
-    frame_size = len(frame)
-    data_size = str(frame_size).zfill(8)
-    print "DATA SIZE:" + data_size
 
     while True:
         for capture_thread in capture_threads:
-            #rval, frame = capture_thread.read()
-            #frame = frame.tostring()
+            rval, frame = capture_thread.read()
+            frame_bytes = frame.tostring()
+            frame_size = len(frame_bytes)
+            data_size = str(frame_size).zfill(8)
 
             destination = ('127.0.0.1', 5005)
             packet_size = 4096
             frame_size = len(frame_bytes)
-            chunks = range(int(1 + (frame_size - 1) / packet_size))
+            num_chunks = int(1 + (frame_size - 1) / packet_size)
+            chunks = range(num_chunks)
             data_size = str(frame_size).zfill(8)
             s.sendto(data_size, destination)
 
             bytes_sent = 0
             for i in chunks:
                 minimum = i * packet_size
-                maximum = i * packet_size + 4096
+                maximum = i * packet_size + packet_size
                 frame_bytes_specific = frame_bytes[minimum:maximum]
                 s.sendto(frame_bytes_specific, destination)
-                bytes_sent = bytes_sent + 4096
+                bytes_sent = bytes_sent + maximum - minimum
             minimum = bytes_sent
             maximum = frame_size
             frame_bytes_specific = frame_bytes[minimum:maximum]

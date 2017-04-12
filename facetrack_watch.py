@@ -11,21 +11,31 @@ def main():
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.bind(("127.0.0.1", 5005))
+    old_frame = None
     while True:
         try:
             data, addr = s.recvfrom(8)
-            print "DATA SIZE: " + str(int(data))
-            frame, addr = s.recvfrom(int(data))
-            m = hashlib.md5()
-            m.update(frame)
-            print "FRAME HASH: {}".format(m.hexdigest())
-            array = numpy.asarray(bytearray(frame), dtype=numpy.uint8)
-            decoded_frame = cv2.imdecode(array, cv2.CV_LOAD_IMAGE_UNCHANGED)
-            import ipdb; ipdb.set_trace()
-            cv2.imshow("preview", decoded_frame)
-            cv2.waitKey(1)
+            frame_size = int(data)
+            bytes_recieved = 0
+            full_frame = ""
+            while bytes_recieved < frame_size:
+                if frame_size - bytes_recieved > 4096:
+                    frame, _ = s.recvfrom(4096)
+                else:
+                    bytes_left = frame_size - bytes_recieved
+                    frame, _ = s.recvfrom(bytes_left)
+                full_frame = full_frame + frame
+                bytes_recieved = bytes_recieved + len(frame)
         except ValueError:
             continue
+
+        array = numpy.asarray(bytearray(full_frame), dtype=numpy.uint8)
+        decoded_frame = cv2.imdecode(array, cv2.CV_LOAD_IMAGE_UNCHANGED)
+        if decoded_frame is None:
+            continue
+        old_frame = decoded_frame
+        cv2.imshow("preview", old_frame)
+        cv2.waitKey(1)
 
 
     cv2.destroyWindow("preview")
