@@ -76,6 +76,10 @@ def main():
         except CameraDoesNotExistException:
             continue
 
+    if len(capture_threads) <= 0:
+        print "Could not open any cameras."
+        sys.exit(1)
+
     def signal_handler(signal, frame):
         for x in capture_threads:
             x.stop()
